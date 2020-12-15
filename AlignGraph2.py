@@ -6,18 +6,12 @@ import subprocess
 import time
 from script import saved_helper
 
-try:
-    import Bio
-except ImportError:
-    print('Error: Biopython not found. ', file=sys.stderr)
-    exit(1)
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Similar genome assisted reassembly pipeline for PacBio long reads', 
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument('--version', action='version', version='%(prog)s 1.0beta')
+    parser.add_argument('--version', action='version', version='%(prog)s 1.0')
     parser.add_argument('-r', '--read', metavar='[fastq]', required=True, type=str, default=argparse.SUPPRESS,
                         help='read path')
     parser.add_argument('-c', '--contig', metavar='[fasta]', required=True, type=str, default=argparse.SUPPRESS,
@@ -36,6 +30,8 @@ if __name__ == '__main__':
                         help='upper bound of k-mer scoring function for mecat2ref+ [1-infinity]')
     parser.add_argument('--delta', metavar='[real]', required=False, type=float, default=0.9,
                         help='threshold for alignment scoring [0-1]')
+    parser.add_argument('-v', metavar='[int]', required=False, type=int, default=2,
+                        help='coverage to filter alignments')
     parser.add_argument('-k', metavar='[int]', required=False, type=int, default=14,
                         help='size of k-mer [4-15]')
     #parser.add_argument('--ratio', required=False, type=float, default=0.2,
@@ -51,11 +47,22 @@ if __name__ == '__main__':
     #parser.add_argument('--clean', required=False, action='store_true',
     #                    help='clean file after running')
 
+    biopython_found = False
+
+    try:
+        import Bio
+        biopython_found = True
+    except ImportError:
+        print('Error: Biopython not found.', file=sys.stderr)
+
     if len(sys.argv) <= 1:
         parser.print_help(file=sys.stderr)
         parser.exit()
 
     args = parser.parse_args()
+
+    if not biopython_found:
+        exit(1)
 
     start_time = time.time()
 
@@ -72,6 +79,7 @@ if __name__ == '__main__':
     lower_score = args.alpha
     uppser_score = args.beta
     filter_score = args.delta
+    filter_cov = args.v
     err_dist = args.epsilon
     min_len = args.l
     block2 = args.a
@@ -93,6 +101,9 @@ if __name__ == '__main__':
         exit(1)
     if not 0.0 <= filter_score <= 1.0:
         print('threshold for alignment scoring must be [0-1]', file=sys.stderr)
+        exit(1)
+    if not 0 <= filter_cov:
+        print('coverage to filter alignments must be >= 0', file=sys.stderr)
         exit(1)
     if not 5 <= err_dist <= 100:
         print('Distance to join two vertices must be [5-100]', file=sys.stderr)
@@ -400,7 +411,7 @@ if __name__ == '__main__':
         p_ref_path = os.path.join(in_dir, 'ref.fasta')
         p_aln_path = os.path.join(in_dir, 'aln')
         
-        subprocess.run([
+        ret = subprocess.run([
             pagraph_cmd,
             '-t', str(thread_num),
             '-r', 'dummy',
@@ -411,12 +422,13 @@ if __name__ == '__main__':
             '-a', p_aln_path,
             '-o', tmp_out_dir,
             '-r', str(min_len),
-            '--epsilon', str(err_dist)
+            '--epsilon', str(err_dist),
+            '-v', str(filter_cov)
         ])
-
-        with open(os.path.join(tmp_out_dir, 'DONE'), 'w'):
-            pass
-        saved_helper.save_args(tmp_out_dir, k=k, r=min_len, e=err_dist)
+        if ret.returncode == 0:
+            with open(os.path.join(tmp_out_dir, 'DONE'), 'w'):
+                pass
+            saved_helper.save_args(tmp_out_dir, k=k, r=min_len, e=err_dist)
 
     #subprocess.run([pagraph_cmd,
     #                '-t', str(thread_num),

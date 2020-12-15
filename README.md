@@ -15,7 +15,7 @@ Python >= 3.6 with Biopython
 ## Installation
 
 ```sh
-git clone --recursive https://github.com/Godotcoffee/AlignGraph2.git
+git clone --recursive https://github.com/huangs001/AlignGraph2.git
 cd AlignGraph2 && python ./install.py
 ```
 
@@ -48,6 +48,8 @@ python ./AlignGraph2.py -r /path/to/read -c /path/to/contig -g /path/to/genome -
 `--beta [real]`, upper bound of k-mer scoring function for mecat2ref+ (default: 2.0)
 
 `--delta [real]`, threshold for alignment scoring (default: 0.9)
+
+`-v [int]`, coverage to filter alignments (default: 2)
 
 `-k [int]`, size of k-mers in A-Bruijn graph (default: 14)
 
