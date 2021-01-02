@@ -23,16 +23,26 @@
 std::unordered_map<std::string, std::set<std::pair<std::string, bool>>>
 parseCtgToRef(const std::string &ctgPath, const std::string &ctgToRefPath, std::size_t topK = 2, double ctgToRefTotalRatio = 0.2) {
 
-    std::vector<std::map<std::pair<std::string, bool>, std::vector<bool>>> ctgCover;
+    //std::vector<std::map<std::pair<std::string, bool>, std::vector<bool>>> ctgCover;
+    std::vector<std::map<std::pair<std::string, bool>, std::size_t>> ctgCover;
     std::unordered_map<std::string, std::size_t> ctgMap;
     std::unordered_map<std::string, std::size_t> refSize;
     std::unordered_map<std::string, std::size_t> ctgSize;
 
+    std::stringstream ss;
+    std::string name2;
+
     SeqHelper::autoLoadFromFile(ctgPath, [&](const std::string &name, const std::string &seq) {
         auto shortComment = name.substr(1);
-        ctgMap[shortComment] = ctgCover.size();
-        ctgSize[shortComment] = seq.size();
+        //std::cout << shortComment << std::endl;
+        ss.str("");
+        ss.clear();
+        ss << shortComment;
+        ss >> name2;
+        ctgMap[name2] = ctgCover.size();
+        ctgSize[name2] = seq.size();
         ctgCover.emplace_back();
+
     });
 
     AlignmentHelper::simpleLoadFromRefFile(ctgToRefPath, [&](SimpleAlign &align) {
@@ -40,13 +50,13 @@ parseCtgToRef(const std::string &ctgPath, const std::string &ctgToRefPath, std::
         auto it = ctgCover[idx].find({align.refName, align.forward});
         if (it == ctgCover[idx].end()) {
             it = ctgCover[idx].emplace(std::make_pair(align.refName, align.forward),
-                                       std::vector<bool>(align.querySize, false)).first;
+                                       0).first;
             refSize[align.refName] = align.refSize;
         }
 
         auto &arr = it->second;
-        std::fill(arr.begin() + align.queryBegin, arr.begin() + align.queryEnd, true);
-
+        //std::fill(arr.begin() + align.queryBegin, arr.begin() + align.queryEnd, true);
+        arr += align.queryEnd - align.queryBegin;
     });
 
     std::unordered_map<std::string, std::set<std::pair<std::string, bool>>> refWithCtg;
@@ -54,25 +64,32 @@ parseCtgToRef(const std::string &ctgPath, const std::string &ctgToRefPath, std::
     for (auto &ctg : ctgMap) {
         auto &ctgName = ctg.first;
         auto &cov = ctgCover[ctg.second];
+        auto total = ctgSize[ctgName];
 
         std::vector<std::pair<std::size_t, std::pair<std::string, bool>>> covToRef;
-
+        //std::cout << cov.size() << std::endl;
         for (auto &refCov : cov) {
             auto refIdx = refCov.first;
+            //std::cout << refIdx.first << ' ' << refIdx.second << std::endl;
             auto &record = refCov.second;
 
-            auto total = record.size();
-            auto cnt = std::accumulate(record.begin(), record.end(), static_cast<decltype(total)>(0));
-
+            //auto total = record.size();
+            //std::cout << '\t' << record.size() << std::endl;
+            //auto cnt = std::accumulate(record.begin(), record.end(), static_cast<decltype(total)>(0));
+            //decltype(total) cnt = 0;
+            //for (auto &rr : record) {
+            //    cnt += rr;
+            //}
+            auto cnt = record;
             if (cnt * 1.0 / total >= ctgToRefTotalRatio) {
                 covToRef.emplace_back(cnt, refIdx);
             }
         }
-
         std::sort(covToRef.begin(), covToRef.end(), [](const std::pair<std::size_t, std::pair<std::string, bool>> &lhs,
                                                        const std::pair<std::size_t, std::pair<std::string, bool>> &rhs) {
             return lhs.first > rhs.first;
         });
+
 
         for (std::size_t i = 0; i < topK && i < covToRef.size(); ++i) {
             refWithCtg[covToRef[i].second.first].insert({ctgName, covToRef[i].second.second});
@@ -107,6 +124,14 @@ void filterReadAndRef(const std::string &readPath, const std::string &readOutDir
     std::map<std::size_t, std::unordered_set<std::size_t>> readMap;
     std::vector<std::set<std::size_t>> readIdx;
 
+    std::size_t readCnt = 0;
+
+    SeqHelper::loadFromFastq(readPath, [&](const std::string &l1, const std::string &l2, const std::string &l3, const std::string &l4) {
+        ++readCnt;
+    });
+
+    std::size_t filterId = readCnt / 1;
+
     std::vector<std::unique_ptr<std::ofstream>> ctgOfs, refOfs, readOfs;
 
     for (auto &withCtg : filterMap) {
@@ -124,6 +149,11 @@ void filterReadAndRef(const std::string &readPath, const std::string &readOutDir
         auto &arr = ctgMap[align.refName];
         for (auto &idx : arr) {
             std::size_t id = std::stoll(align.queryName);
+
+            if ((id - 1) >= filterId) {
+                continue;
+            }
+
             readIdx[idx].insert(id);
             readMap[id].insert(idx);
 
@@ -138,6 +168,11 @@ void filterReadAndRef(const std::string &readPath, const std::string &readOutDir
         auto &arr = refMap[align.refName];
         for (auto &idx : arr) {
             std::size_t id = std::stoll(align.queryName);
+
+            if ((id - 1) >= filterId) {
+                continue;
+            }
+
             readIdx[idx].insert(id);
             readMap[id].insert(idx);
 
