@@ -63,6 +63,6 @@ python ./AlignGraph2.py -r /path/to/read -c /path/to/contig -g /path/to/genome -
 
 [aligngraph]: https://github.com/baoe/AlignGraph
 
-Warning
+### Warning
 
 To generate longer contigs, it is not avoidable that AlignGraph2 introduces additional misassemblies. Forturnately, it introduces much fewer misassemblies per mbp than the upstream de novo assembly algorithms.
